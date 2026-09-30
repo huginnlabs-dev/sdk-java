@@ -31,7 +31,7 @@ import java.util.function.Consumer;
 public final class Dataflow {
 
     /** SDK version stamped into agent metadata and the startup manifest. */
-    public static final String SDK_VERSION = "0.3.0";
+    public static final String SDK_VERSION = "0.4.0";
 
     /** Immutable SDK configuration. */
     public static final class Settings {

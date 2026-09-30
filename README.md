@@ -12,6 +12,8 @@ the Go and Python SDKs.
 - Agent metadata (OS, JVM, pid, CPU) on entry-point spans
 - Service manifest reported once at startup (framework, runtime, fat-jar
   dependency inventory) for the project's service catalog
+- Static route scanner CLI (`dev.huginnlabs.dataflow.scan.ScanCli`) feeding
+  the server's route catalog from Spring / JAX-RS annotations
 - `DataflowFilter` for the JDK built-in HTTP server; one `Dataflow.trace()`
   scope per measurement point for everything else
 - `Dataflow.instrument(HttpClient)` — outgoing HTTP calls become HTTP_CLIENT
@@ -76,6 +78,31 @@ try (Connection conn = Dataflow.wrap(
 }
 ```
 
+## Route scanning
+
+`dev.huginnlabs.dataflow.scan.ScanCli` is a static route scanner: it walks a
+source tree, extracts HTTP endpoints from Java files (Spring `@GetMapping` /
+`@PostMapping` / `@PutMapping` / `@DeleteMapping` / `@PatchMapping` /
+`@RequestMapping` — including multi-line annotations and class-level path
+prefixes — and JAX-RS `@Path` + `@GET`/`@POST`/… pairs) and posts them to the
+server catalog (`POST /api/v1/catalog`) so declared routes can be correlated
+with observed traffic. Extraction is regex-based over source lines — the SDK
+stays dependency-free. Build directories (`target/`, `build/`, `.git/`) and
+`*Test.java` files are skipped; `{param}` templates are kept as written.
+
+```bash
+mvn -q compile exec:java -Dexec.mainClass=dev.huginnlabs.dataflow.scan.ScanCli \
+    -Dexec.args="--dir /path/to/service --service my-service \
+                 --api-key df_... --url https://dataflow.example"
+```
+
+Flags: `--dir` (source root, required), `--service` (or
+`DATAFLOW_SERVICE_NAME`), `--url`, `--api-key` (or `DATAFLOW_API_KEY`), and
+`--print` to write the catalog JSON to stdout without posting. Base URL
+resolution matches the startup manifest: `--url` > `DATAFLOW_HTTP_URL` >
+URL-form `DATAFLOW_ENDPOINT` (a bare `host:port` endpoint is gRPC-only and is
+skipped with a clear message).
+
 ## Environment
 
 | Variable | Meaning |
@@ -95,7 +122,7 @@ try (Connection conn = Dataflow.wrap(
 <dependency>
   <groupId>dev.huginnlabs.dataflow</groupId>
   <artifactId>dataflow-sdk</artifactId>
-  <version>0.3.0</version>
+  <version>0.4.0</version>
 </dependency>
 ```
 
