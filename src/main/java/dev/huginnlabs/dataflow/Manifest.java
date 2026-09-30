@@ -28,6 +28,10 @@ import java.util.jar.JarFile;
  */
 final class Manifest {
 
+    // Language wrappers (Kotlin) that report their own manifest flip this via
+    // Dataflow.skipManifest() so the JVM-core manifest does not race theirs.
+    private static volatile boolean coreDisabled;
+
     /** Server-side cap on the reported dependency list. */
     private static final int MAX_DEPS = 500;
     /** Wire-contract string caps (service_name/others 128, dep name 256, version 64). */
@@ -116,7 +120,14 @@ final class Manifest {
      * Best-effort: daemon thread, short timeout, silent failures — never
      * blocks startup or tracing.
      */
+    static void disableCore() {
+        coreDisabled = true;
+    }
+
     static void sendManifest() {
+        if (coreDisabled) {
+            return;
+        }
         try {
             Dataflow.Settings s = Dataflow.settings();
             if (s.disabled || s.apiKey.isEmpty()) return;

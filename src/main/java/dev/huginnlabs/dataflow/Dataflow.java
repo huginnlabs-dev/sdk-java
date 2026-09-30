@@ -166,6 +166,15 @@ public final class Dataflow {
         Pipeline.start(s);
     }
 
+    /**
+     * Suppresses the JVM-core manifest report. Language wrappers that send
+     * their own manifest (Kotlin) call this before {@link #configure()} so
+     * the catalog shows one entry per service, not a race of two.
+     */
+    public static void skipManifest() {
+        Manifest.disableCore();
+    }
+
     /** Opens a child span of the current thread's span (or a new trace). */
     public static Span startSpan(String name) {
         return startSpan(name, "FUNCTION_CALL");
