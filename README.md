@@ -10,6 +10,8 @@ the Go and Python SDKs.
 - Field-name lineage (`data.fields`) + client-side PII classification
   (`data.pii`) in span metadata
 - Agent metadata (OS, JVM, pid, CPU) on entry-point spans
+- Service manifest reported once at startup (framework, runtime, fat-jar
+  dependency inventory) for the project's service catalog
 - `DataflowFilter` for the JDK built-in HTTP server; one `Dataflow.trace()`
   scope per measurement point for everything else
 
@@ -45,6 +47,7 @@ server.createContext("/", handler).getFilters().add(new DataflowFilter());
 | `DATAFLOW_SAMPLE_RATIO` | 0..1 sampling (default 1.0) |
 | `DATAFLOW_BUFFER_SIZE` | replay buffer cap (default 10000) |
 | `DATAFLOW_ENV` / `DATAFLOW_APP_VERSION` | deployment tags |
+| `DATAFLOW_HTTP_URL` | HTTP API base for manifest reporting (override when `DATAFLOW_ENDPOINT` is a bare `host:port`) |
 
 ## Maven
 
@@ -52,7 +55,7 @@ server.createContext("/", handler).getFilters().add(new DataflowFilter());
 <dependency>
   <groupId>dev.huginnlabs.dataflow</groupId>
   <artifactId>dataflow-sdk</artifactId>
-  <version>0.1.0</version>
+  <version>0.2.0</version>
 </dependency>
 ```
 

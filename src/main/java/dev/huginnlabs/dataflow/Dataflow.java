@@ -25,12 +25,13 @@ import java.util.function.Consumer;
  * {@code DATAFLOW_ENCRYPTION_KEY} (payloads stay plaintext when unset),
  * {@code DATAFLOW_SAMPLE_RATIO}, {@code DATAFLOW_BUFFER_SIZE},
  * {@code DATAFLOW_MAX_BODY_BYTES}, {@code DATAFLOW_ENV},
- * {@code DATAFLOW_APP_VERSION}, {@code DATAFLOW_DISABLED}.
+ * {@code DATAFLOW_APP_VERSION}, {@code DATAFLOW_HTTP_URL} (HTTP API base
+ * for service-manifest reporting), {@code DATAFLOW_DISABLED}.
  */
 public final class Dataflow {
 
-    /** SDK version stamped into agent metadata. */
-    public static final String SDK_VERSION = "0.1.0";
+    /** SDK version stamped into agent metadata and the startup manifest. */
+    public static final String SDK_VERSION = "0.2.0";
 
     /** Immutable SDK configuration. */
     public static final class Settings {
@@ -159,6 +160,9 @@ public final class Dataflow {
             s.logger.accept("dataflow: no API key configured; SDK stays passive (set DATAFLOW_API_KEY)");
             return;
         }
+        // Report the service manifest (runtime, framework, dependency
+        // inventory) once; best-effort, independent of the tracing pipeline.
+        Manifest.sendManifest();
         Pipeline.start(s);
     }
 
