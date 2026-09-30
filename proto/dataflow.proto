@@ -1,0 +1,79 @@
+// Canonical wire contract of the Dataflow ingestion gRPC API. Source of
+// truth for code generation (gen/dataflowpb); keep in sync with the REST
+// ingest JSON schema (server /api/v1/ingest) and the other SDKs.
+//
+// Vendored copy of dataflow-go/proto/dataflow.proto (identical except for
+// the Java codegen options below) so this standalone SDK repo builds
+// without reaching outside its checkout. Update BOTH files together.
+syntax = "proto3";
+
+package dataflow.v1;
+
+option go_package = "github.com/huginnlabs-dev/dataflow-go/gen/dataflowpb";
+
+// Java/Kotlin codegen: single outer class, stable package.
+option java_package = "dev.huginnlabs.dataflow.gen";
+option java_outer_classname = "DataflowProto";
+
+// EventType classifies one traced span.
+enum EventType {
+  EVENT_TYPE_UNSPECIFIED = 0;
+  // A traced function call crossing a package boundary.
+  EVENT_TYPE_FUNCTION_CALL = 1;
+  // Server-side HTTP request handling (entry point span).
+  EVENT_TYPE_HTTP_SERVER = 2;
+  // Outgoing HTTP request from the traced service.
+  EVENT_TYPE_HTTP_CLIENT = 3;
+  // gRPC call (client or server side).
+  EVENT_TYPE_GRPC = 4;
+  // LLM/API model call (prompt/response spans).
+  EVENT_TYPE_LLM_CALL = 5;
+  // Database query executed by the traced service (db.* metadata carries
+  // the system and statement kind, never parameter values).
+  EVENT_TYPE_DB_QUERY = 6;
+}
+
+// PayloadData carries the optional captured payload excerpt.
+message PayloadData {
+  bool encrypted = 1;
+  bytes data = 2;      // ciphertext when encrypted=true, otherwise UTF-8 JSON
+  bytes iv = 3;        // 96-bit nonce, set when encrypted=true
+  string key_salt = 4; // hex-encoded PBKDF2 salt so a dashboard can re-derive the key client-side
+}
+
+// TraceEvent is one span of one trace.
+message TraceEvent {
+  string event_id = 1;
+  int64 seq = 2;
+  string project_id = 3;  // optional; server resolves project from API key
+  int64 timestamp = 4;    // span start, unix millis
+  int64 duration_ms = 5;
+  EventType type = 6;
+  string service_name = 7;
+  string name = 8; // route template ("GET /api/users/:id") or function name
+  string caller_package = 9;
+  string callee_package = 10;
+  string function_name = 11;
+  int32 status_code = 12; // HTTP status or gRPC code
+  string error_message = 13;
+  string trace_id = 14;
+  string span_id = 15;
+  string parent_span_id = 16;
+  PayloadData payload = 17;
+  map<string, string> metadata = 18; // plaintext metadata (headers redacted, attrs, ...)
+}
+
+// AckResponse is the durable watermark the server streams back.
+message AckResponse {
+  int64 last_seq = 1;
+  int64 accepted_total = 2;
+}
+
+message Empty {}
+
+service DataflowService {
+  // Bidi stream: SDKs push spans, the server acks the highest durable seq.
+  rpc StreamEvents(stream TraceEvent) returns (stream AckResponse);
+  // Liveness probe.
+  rpc Health(Empty) returns (Empty);
+}

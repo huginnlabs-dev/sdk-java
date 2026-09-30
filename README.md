@@ -14,6 +14,10 @@ the Go and Python SDKs.
   dependency inventory) for the project's service catalog
 - `DataflowFilter` for the JDK built-in HTTP server; one `Dataflow.trace()`
   scope per measurement point for everything else
+- `Dataflow.instrument(HttpClient)` — outgoing HTTP calls become HTTP_CLIENT
+  spans and propagate `X-Dataflow-Trace-Id`
+- `Dataflow.wrap(Connection, system)` — JDBC statements become DB_QUERY spans
+  (`<VERB> <table>` names, statement text only — never bind parameter values)
 
 ## Quick start
 
@@ -36,6 +40,42 @@ HttpServer server = HttpServer.create(new InetSocketAddress(8080), 0);
 server.createContext("/", handler).getFilters().add(new DataflowFilter());
 ```
 
+## Outgoing HTTP
+
+Wrap a JDK `HttpClient` once; every `send`/`sendAsync` then emits one
+`HTTP_CLIENT` span (`"METHOD host/path"`, host as callee, HTTP status,
+`http.method`/`http.url` metadata) and injects `X-Dataflow-Trace-Id` — only
+when the caller has not set it — so the receiving instrumented service
+continues the same trace:
+
+```java
+TracedHttpClient client = Dataflow.instrument(HttpClient.newHttpClient());
+client.send(HttpRequest.newBuilder(URI.create("https://payments.example/charge"))
+        .POST(HttpRequest.BodyPublishers.ofString(body))
+        .build(), HttpResponse.BodyHandlers.ofString());
+```
+
+## JDBC
+
+Wrap an open connection with the database system's name; every executed
+statement emits one `DB_QUERY` span named `"<VERB> <table>"` (e.g.
+`SELECT orders`, `INSERT users`, `CREATE migrations` — `IF [NOT] EXISTS`
+skipped, `public.items` reported as `items`). Metadata carries `db.system`
+and `db.statement` (single-spaced, capped at 200 chars). Only statement
+text is captured — never bind parameter values. `close`, `unwrap` and
+transaction calls pass through; driver SQLExceptions propagate unchanged.
+Tracing is decided per query, so wrapping before `configure()` is safe.
+
+```java
+try (Connection conn = Dataflow.wrap(
+        DriverManager.getConnection(url, user, password), "postgresql");
+     PreparedStatement ps = conn.prepareStatement(
+        "SELECT id, total FROM orders WHERE id = ?")) {
+    ps.setLong(1, orderId);                     // values never leave the host
+    try (ResultSet rs = ps.executeQuery()) { ... }
+}
+```
+
 ## Environment
 
 | Variable | Meaning |
@@ -55,14 +95,16 @@ server.createContext("/", handler).getFilters().add(new DataflowFilter());
 <dependency>
   <groupId>dev.huginnlabs.dataflow</groupId>
   <artifactId>dataflow-sdk</artifactId>
-  <version>0.2.0</version>
+  <version>0.3.0</version>
 </dependency>
 ```
 
-Build from the repo root (generates stubs from `proto/dataflow.proto`):
+Build from this directory (generates stubs from `proto/dataflow.proto`, a
+vendored copy of the canonical `dataflow-go/proto/dataflow.proto` with Java
+codegen options — update both together):
 
 ```
-mvn -f sdk-java/pom.xml install
+mvn install
 ```
 
 Live example: `example-java/` (booking flow, gRPC ingest, load generator).

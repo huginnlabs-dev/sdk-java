@@ -39,6 +39,12 @@ final class Pipeline {
     private static long bufferBase = 1; // seq of BUFFER.peekFirst()
     private static volatile boolean running;
 
+    /**
+     * Test seam: when set, completed events are handed to this sink and the
+     * wire pipeline is bypassed entirely. Never set by production code.
+     */
+    static volatile java.util.function.Consumer<TraceEvent> testSink;
+
     private Pipeline() {}
 
     static long nextSeq() { return SEQ.incrementAndGet(); }
@@ -55,6 +61,8 @@ final class Pipeline {
 
     /** Single entry point from Span.end() into the delivery path. */
     static void enqueue(TraceEvent event) {
+        java.util.function.Consumer<TraceEvent> sink = testSink;
+        if (sink != null) { sink.accept(event); return; }
         if (!running) return;
         LOCK.lock();
         try {

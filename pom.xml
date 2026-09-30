@@ -12,7 +12,7 @@
 
   <groupId>dev.huginnlabs.dataflow</groupId>
   <artifactId>dataflow-sdk</artifactId>
-  <version>0.2.0</version>
+  <version>0.3.0</version>
   <packaging>jar</packaging>
 
   <properties>
@@ -50,6 +50,12 @@
       <version>6.0.53</version>
       <scope>provided</scope>
     </dependency>
+    <dependency>
+      <groupId>org.junit.jupiter</groupId>
+      <artifactId>junit-jupiter</artifactId>
+      <version>5.10.2</version>
+      <scope>test</scope>
+    </dependency>
   </dependencies>
 
   <build>
@@ -66,8 +72,10 @@
         <artifactId>protobuf-maven-plugin</artifactId>
         <version>0.6.1</version>
         <configuration>
-          <!-- The wire contract lives once at the repo root, shared with Go/Python/C++. -->
-          <protoSourceRoot>${project.basedir}/../proto</protoSourceRoot>
+          <!-- Vendored wire contract: identical to dataflow-go/proto/dataflow.proto
+               except for the Java codegen options, so this standalone SDK repo
+               is self-contained. Update BOTH files together. -->
+          <protoSourceRoot>${project.basedir}/proto</protoSourceRoot>
           <protocArtifact>com.google.protobuf:protoc:${protobuf.version}:exe:${os.detected.classifier}</protocArtifact>
           <pluginId>grpc-java</pluginId>
           <pluginArtifact>io.grpc:protoc-gen-grpc-java:${grpc.version}:exe:${os.detected.classifier}</pluginArtifact>
@@ -77,6 +85,12 @@
             <goals><goal>compile</goal><goal>compile-custom</goal></goals>
           </execution>
         </executions>
+      </plugin>
+      <!-- Default surefire (2.12.4) cannot run JUnit 5. -->
+      <plugin>
+        <groupId>org.apache.maven.plugins</groupId>
+        <artifactId>maven-surefire-plugin</artifactId>
+        <version>3.2.5</version>
       </plugin>
     </plugins>
   </build>

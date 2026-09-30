@@ -31,7 +31,7 @@ import java.util.function.Consumer;
 public final class Dataflow {
 
     /** SDK version stamped into agent metadata and the startup manifest. */
-    public static final String SDK_VERSION = "0.2.0";
+    public static final String SDK_VERSION = "0.3.0";
 
     /** Immutable SDK configuration. */
     public static final class Settings {
@@ -173,6 +173,32 @@ public final class Dataflow {
      */
     public static void skipManifest() {
         Manifest.disableCore();
+    }
+
+    /**
+     * Wraps a JDK {@link HttpClient} so every {@code send}/{@code sendAsync}
+     * emits one HTTP_CLIENT span joined to the current trace and injects
+     * {@code X-Dataflow-Trace-Id} (unless the caller set it) so the receiving
+     * instrumented service continues the same trace. Best-effort: when the
+     * SDK is disabled the wrapper passes through untouched. The wrapper is
+     * deliberately not an {@code HttpClient} subtype (see
+     * {@link TracedHttpClient}); reach the original client through
+     * {@code TracedHttpClient#delegate()}.
+     */
+    public static TracedHttpClient instrument(java.net.http.HttpClient client) {
+        return TracedHttpClient.create(client);
+    }
+
+    /**
+     * Wraps an open JDBC {@link Connection} so every executed statement emits
+     * one DB_QUERY span ({@code "<VERB> <table>"} name, {@code db.system} /
+     * {@code db.statement} metadata). Only the statement text is captured —
+     * never bind parameter values. {@code system} labels the database engine
+     * ("postgresql", "mysql", …) as the span's callee package. Tracing is
+     * decided per query, so wrapping before {@link #configure()} is safe.
+     */
+    public static java.sql.Connection wrap(java.sql.Connection conn, String system) {
+        return Jdbc.wrap(conn, system);
     }
 
     /** Opens a child span of the current thread's span (or a new trace). */

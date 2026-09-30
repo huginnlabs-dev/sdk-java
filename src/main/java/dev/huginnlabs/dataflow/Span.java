@@ -167,6 +167,8 @@ public final class Span {
             case "HTTP_SERVER": return DataflowProto.EventType.EVENT_TYPE_HTTP_SERVER;
             case "HTTP_CLIENT": return DataflowProto.EventType.EVENT_TYPE_HTTP_CLIENT;
             case "GRPC": return DataflowProto.EventType.EVENT_TYPE_GRPC;
+            case "LLM_CALL": return DataflowProto.EventType.EVENT_TYPE_LLM_CALL;
+            case "DB_QUERY": return DataflowProto.EventType.EVENT_TYPE_DB_QUERY;
             default: return DataflowProto.EventType.EVENT_TYPE_FUNCTION_CALL;
         }
     }
@@ -176,4 +178,14 @@ public final class Span {
 
     /** Adopts an incoming trace id (X-Dataflow-Trace-Id propagation). */
     void joinTrace(String id) { if (id != null && !id.isEmpty()) this.traceId = id; }
+
+    // Package-private test seams (tests live in the same package).
+    String name() { return name; }
+    String type() { return type; }
+    String calleePackage() { return calleePackage; }
+    int statusCode() { return statusCode; }
+    String errorMessage() { return errorMessage; }
+    Map<String, String> metadataCopy() {
+        synchronized (lock) { return new LinkedHashMap<>(metadata); }
+    }
 }
