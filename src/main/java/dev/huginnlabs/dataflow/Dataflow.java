@@ -1,5 +1,6 @@
 package dev.huginnlabs.dataflow;
 
+import java.util.concurrent.Callable;
 import java.util.concurrent.atomic.AtomicBoolean;
 import dev.huginnlabs.dataflow.gen.DataflowProto;
 import java.util.function.Consumer;
@@ -31,7 +32,7 @@ import java.util.function.Consumer;
 public final class Dataflow {
 
     /** SDK version stamped into agent metadata and the startup manifest. */
-    public static final String SDK_VERSION = "0.4.0";
+    public static final String SDK_VERSION = "0.5.0";
 
     /** Immutable SDK configuration. */
     public static final class Settings {
@@ -199,6 +200,57 @@ public final class Dataflow {
      */
     public static java.sql.Connection wrap(java.sql.Connection conn, String system) {
         return Jdbc.wrap(conn, system);
+    }
+
+    /**
+     * Runs {@code body} and records any crash on the current span — status
+     * 500, the exception's {@code toString()} (clipped to 500 chars) as
+     * error_message and its stack trace as {@code error.stack} metadata —
+     * then rethrows it: nothing is swallowed. Checked throwables the
+     * {@link Runnable} contract cannot declare are re-wrapped in
+     * {@link RuntimeException}. With no span active a synthetic
+     * {@code "exception"} span carries the record. When the SDK is disabled
+     * the body simply runs.
+     */
+    public static void capture(Runnable body) {
+        if (body == null) throw new NullPointerException("body");
+        if (!enabled()) {
+            body.run();
+            return;
+        }
+        Crash.run(body);
+    }
+
+    /**
+     * {@link #capture(Runnable)} for a {@link Callable}: the value comes
+     * back on success and any throwable is recorded, then rethrown
+     * unchanged — a {@link Callable} declares {@code throws Exception}, so
+     * checked exceptions propagate as-is. When the SDK is disabled the body
+     * simply runs.
+     */
+    public static <T> T captureCallable(Callable<T> body) throws Exception {
+        if (body == null) throw new NullPointerException("body");
+        if (!enabled()) return body.call();
+        return Crash.call(body);
+    }
+
+    /**
+     * Records uncaught exceptions JVM-wide: installs a default
+     * uncaught-exception handler that records each thread death on a
+     * synthetic {@code "uncaught exception"} span (same wire shape as
+     * {@link #capture(Runnable)}) and then chains to the previously
+     * installed handler — or reproduces the JVM's standard stderr report
+     * when none was set. A hook cannot rethrow, so the crash still ends the
+     * way it would have. Idempotent; no-op while the SDK is disabled. Pair
+     * with {@link #ignoreUncaught()} to restore the previous handler.
+     */
+    public static void captureUncaught() {
+        Crash.installUncaught();
+    }
+
+    /** Restores the uncaught-exception handler wrapped by {@link #captureUncaught()}. */
+    public static void ignoreUncaught() {
+        Crash.ignoreUncaught();
     }
 
     /** Opens a child span of the current thread's span (or a new trace). */

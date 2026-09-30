@@ -23,6 +23,7 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertSame;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
@@ -87,6 +88,42 @@ class DataflowDisabledTest {
 
     @Test
     @Order(3)
+    void captureRunsBodyAndPropagatesWhenDisabled() {
+        assertFalse(Dataflow.enabled());
+        List<String> ran = new ArrayList<>();
+        IllegalStateException boom = new IllegalStateException("boom");
+        RuntimeException thrown = assertThrows(RuntimeException.class,
+                () -> Dataflow.capture(() -> {
+                    ran.add("ran");
+                    throw boom;
+                }));
+        assertSame(boom, thrown);
+        assertEquals(List.of("ran"), ran);
+    }
+
+    @Test
+    @Order(4)
+    void captureCallablePassesThroughWhenDisabled() throws Exception {
+        assertFalse(Dataflow.enabled());
+        assertEquals("ok", Dataflow.captureCallable(() -> "ok"));
+        Exception e = assertThrows(java.io.IOException.class,
+                () -> Dataflow.captureCallable(() -> { throw new java.io.IOException("io"); }));
+        assertEquals("io", e.getMessage());
+    }
+
+    @Test
+    @Order(5)
+    void captureUncaughtNoOpsWhenDisabled() {
+        assertFalse(Dataflow.enabled());
+        Thread.UncaughtExceptionHandler before = Thread.getDefaultUncaughtExceptionHandler();
+        Dataflow.captureUncaught(); // disabled: nothing is installed
+        assertSame(before, Thread.getDefaultUncaughtExceptionHandler());
+        Dataflow.ignoreUncaught(); // no-op, must not throw
+        assertSame(before, Thread.getDefaultUncaughtExceptionHandler());
+    }
+
+    @Test
+    @Order(6)
     void wrappingBeforeConfigureIsSafeAndLaterQueriesAreTraced() throws Exception {
         List<String> calls = new ArrayList<>();
         Connection conn = Dataflow.wrap(fakeConn(calls), "postgresql");

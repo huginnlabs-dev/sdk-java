@@ -20,6 +20,9 @@ the Go and Python SDKs.
   spans and propagate `X-Dataflow-Trace-Id`
 - `Dataflow.wrap(Connection, system)` — JDBC statements become DB_QUERY spans
   (`<VERB> <table>` names, statement text only — never bind parameter values)
+- `Dataflow.capture` / `Dataflow.captureUncaught` — crash capture: crashes are
+  recorded (status 500, `error_message`, `error.stack`) and then rethrown or
+  chained, never swallowed
 
 ## Quick start
 
@@ -78,6 +81,31 @@ try (Connection conn = Dataflow.wrap(
 }
 ```
 
+## Crash capture
+
+`Dataflow.capture` / `Dataflow.captureCallable` run a body and record any
+crash on the current span — status `500`, `error_message` = the exception's
+`toString()` clipped to 500 chars, `error.stack` metadata carrying the stack
+trace capped at 8192 chars from the top — and then rethrow it: recording is
+best-effort, the exception itself is never swallowed. A checked throwable the
+`Runnable` contract cannot declare is re-wrapped in `RuntimeException`; a
+`Callable`'s checked exceptions propagate as declared. With no span active a
+synthetic `exception` span carries the record.
+
+```java
+Dataflow.capture(() -> processOrder(orderId));          // crash -> span + rethrow
+String rendered = Dataflow.captureCallable(() -> render(orderId));
+```
+
+`Dataflow.captureUncaught()` installs a JVM-wide default uncaught-exception
+handler: every thread death is recorded on a synthetic `uncaught exception`
+span (same wire shape) and then chained to the previously installed handler —
+or the standard stderr report when none was set — so existing hooks keep
+working. A hook cannot rethrow, and neither does this one. The install is
+idempotent; `Dataflow.ignoreUncaught()` restores the previous handler. While
+the SDK is disabled everything passes through: bodies run, the handler is
+never installed.
+
 ## Route scanning
 
 `dev.huginnlabs.dataflow.scan.ScanCli` is a static route scanner: it walks a
@@ -122,7 +150,7 @@ skipped with a clear message).
 <dependency>
   <groupId>dev.huginnlabs.dataflow</groupId>
   <artifactId>dataflow-sdk</artifactId>
-  <version>0.4.0</version>
+  <version>0.5.0</version>
 </dependency>
 ```
 
