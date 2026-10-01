@@ -124,6 +124,31 @@ class DataflowDisabledTest {
 
     @Test
     @Order(6)
+    void logsAreNoOpsWhenDisabled() {
+        assertFalse(Dataflow.enabled());
+        Dataflow.info("nope", java.util.Map.of("k", "v"));
+        Dataflow.warn("nope", null);
+        Dataflow.error("nope", null);
+        Dataflow.debug("nope", null);
+        Dataflow.log("warn", "nope", null);
+        Dataflow.flushLogs(); // must not throw
+        assertEquals(0, Logs.pending());
+
+        // The JUL bridge records nothing while disabled.
+        java.util.logging.Logger logger = java.util.logging.Logger.getLogger("sdk.disabled.jul");
+        logger.setUseParentHandlers(false);
+        Dataflow.LogHandler handler = new Dataflow.LogHandler();
+        logger.addHandler(handler);
+        try {
+            logger.info("disabled record");
+        } finally {
+            logger.removeHandler(handler);
+        }
+        assertEquals(0, Logs.pending());
+    }
+
+    @Test
+    @Order(7)
     void wrappingBeforeConfigureIsSafeAndLaterQueriesAreTraced() throws Exception {
         List<String> calls = new ArrayList<>();
         Connection conn = Dataflow.wrap(fakeConn(calls), "postgresql");

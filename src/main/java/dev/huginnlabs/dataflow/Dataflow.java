@@ -1,5 +1,6 @@
 package dev.huginnlabs.dataflow;
 
+import java.util.Map;
 import java.util.concurrent.Callable;
 import java.util.concurrent.atomic.AtomicBoolean;
 import dev.huginnlabs.dataflow.gen.DataflowProto;
@@ -27,12 +28,12 @@ import java.util.function.Consumer;
  * {@code DATAFLOW_SAMPLE_RATIO}, {@code DATAFLOW_BUFFER_SIZE},
  * {@code DATAFLOW_MAX_BODY_BYTES}, {@code DATAFLOW_ENV},
  * {@code DATAFLOW_APP_VERSION}, {@code DATAFLOW_HTTP_URL} (HTTP API base
- * for service-manifest reporting), {@code DATAFLOW_DISABLED}.
+ * for service-manifest reporting and log shipping), {@code DATAFLOW_DISABLED}.
  */
 public final class Dataflow {
 
     /** SDK version stamped into agent metadata and the startup manifest. */
-    public static final String SDK_VERSION = "0.5.0";
+    public static final String SDK_VERSION = "0.6.0";
 
     /** Immutable SDK configuration. */
     public static final class Settings {
@@ -165,6 +166,7 @@ public final class Dataflow {
         // inventory) once; best-effort, independent of the tracing pipeline.
         Manifest.sendManifest();
         Pipeline.start(s);
+        Logs.start(s);
     }
 
     /**
@@ -251,6 +253,81 @@ public final class Dataflow {
     /** Restores the uncaught-exception handler wrapped by {@link #captureUncaught()}. */
     public static void ignoreUncaught() {
         Crash.ignoreUncaught();
+    }
+
+    // -- application logs -----------------------------------------------------
+
+    /**
+     * Ships an {@code info} log line. The line is stamped with the current
+     * span's trace/span ids (empty outside a trace), a millisecond timestamp
+     * and the {@code fields} map stringified via {@code String.valueOf}
+     * (max 50 entries). Buffered in a bounded queue and POSTed to
+     * {@code /api/v1/logs} by a background flusher — best-effort: never
+     * blocks or throws, drops the oldest line when the queue is full, and
+     * is a no-op while the SDK is disabled.
+     */
+    public static void info(String message, Map<String, Object> fields) {
+        Logs.record("info", message, fields);
+    }
+
+    /** {@link #info(String, Map)} at {@code warn} level. */
+    public static void warn(String message, Map<String, Object> fields) {
+        Logs.record("warn", message, fields);
+    }
+
+    /** {@link #info(String, Map)} at {@code error} level. */
+    public static void error(String message, Map<String, Object> fields) {
+        Logs.record("error", message, fields);
+    }
+
+    /** {@link #info(String, Map)} at {@code debug} level. */
+    public static void debug(String message, Map<String, Object> fields) {
+        Logs.record("debug", message, fields);
+    }
+
+    /**
+     * Ships a log line at an arbitrary level, normalized onto the wire's
+     * {@code debug|info|warn|error} (JUL names — {@code SEVERE},
+     * {@code WARNING}, {@code FINE}, … — included; unknown labels report as
+     * {@code info}). Best-effort like the level helpers.
+     */
+    public static void log(String level, String message, Map<String, Object> fields) {
+        Logs.record(level, message, fields);
+    }
+
+    /**
+     * Best-effort wait (up to ~5 seconds) until every buffered log line has
+     * been POSTed — useful right before JVM exit. Never throws.
+     */
+    public static void flushLogs() {
+        Logs.flush(5000);
+    }
+
+    /**
+     * A {@link java.util.logging.Handler} that forwards JUL records into
+     * the log pipeline: levels map onto the wire's names ({@code SEVERE}→
+     * {@code error}, {@code WARNING}→{@code warn}, {@code INFO}→
+     * {@code info}, {@code FINE}/ {@code FINER}/ {@code FINEST}→
+     * {@code debug}) and message parameters ({@code "{0}"} placeholders)
+     * are formatted; logger names, throwables and other extras are skipped.
+     * Records nothing while the SDK is disabled. Install on the root
+     * logger (or any logger):
+     *
+     * <pre>{@code
+     * java.util.logging.Logger.getLogger("").addHandler(new Dataflow.LogHandler());
+     * }</pre>
+     */
+    public static final class LogHandler extends java.util.logging.Handler {
+
+        @Override public void publish(java.util.logging.LogRecord record) {
+            if (record == null) return;
+            Logs.jul(record);
+        }
+
+        /** No-op: the log flusher batches on its own schedule (or flushLogs()). */
+        @Override public void flush() {}
+
+        @Override public void close() {}
     }
 
     /** Opens a child span of the current thread's span (or a new trace). */

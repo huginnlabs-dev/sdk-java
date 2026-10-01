@@ -23,6 +23,9 @@ the Go and Python SDKs.
 - `Dataflow.capture` / `Dataflow.captureUncaught` — crash capture: crashes are
   recorded (status 500, `error_message`, `error.stack`) and then rethrown or
   chained, never swallowed
+- `Dataflow.info/warn/error/debug` + `Dataflow.LogHandler` (JUL bridge) —
+  application log shipping batched to `POST /api/v1/logs` with trace/span
+  correlation
 
 ## Quick start
 
@@ -106,6 +109,39 @@ idempotent; `Dataflow.ignoreUncaught()` restores the previous handler. While
 the SDK is disabled everything passes through: bodies run, the handler is
 never installed.
 
+## Log capture
+
+`Dataflow.info` / `warn` / `error` / `debug` ship application logs to
+`POST /api/v1/logs`, batched by a background daemon thread (~500 ms per
+flush, or immediately at 50 buffered lines, ≤1000 lines per POST). Each
+line carries the current span's `trace_id` / `span_id` (empty outside a
+trace), `service_name`, a millisecond `timestamp` and the `fields` map
+stringified via `String.valueOf` (max 50 entries) — so dashboard logs join
+the trace timeline. Sending is best-effort: recording never blocks or
+throws, the 1024-line buffer drops its oldest line under pressure (counted),
+a failed POST retries once and the batch is then dropped, and
+`Dataflow.flushLogs()` waits at most ~5 seconds (useful before JVM exit).
+
+```java
+Dataflow.info("booking created", Map.of("order", "ord_42"));
+Dataflow.warn("cache cold", null);
+Dataflow.flushLogs();                       // best-effort drain before exit
+```
+
+For `java.util.logging` users, `Dataflow.LogHandler` forwards records with
+level mapping (`SEVERE`→`error`, `WARNING`→`warn`, `INFO`→`info`,
+`FINE`/`FINER`/`FINEST`→`debug`) and `{0}`-style parameter formatting —
+logger names, throwables and other extras are skipped:
+
+```java
+java.util.logging.Logger.getLogger("").addHandler(new Dataflow.LogHandler());
+```
+
+The HTTP base resolves like the startup manifest's
+(`DATAFLOW_HTTP_URL` > URL-form `DATAFLOW_ENDPOINT`; a bare `host:port`
+gRPC endpoint ships no logs). While the SDK is disabled every call is a
+no-op and the handler records nothing.
+
 ## Route scanning
 
 `dev.huginnlabs.dataflow.scan.ScanCli` is a static route scanner: it walks a
@@ -150,7 +186,7 @@ skipped with a clear message).
 <dependency>
   <groupId>dev.huginnlabs.dataflow</groupId>
   <artifactId>dataflow-sdk</artifactId>
-  <version>0.5.0</version>
+  <version>0.6.0</version>
 </dependency>
 ```
 
