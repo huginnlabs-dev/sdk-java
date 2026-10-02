@@ -33,7 +33,7 @@ import java.util.function.Consumer;
 public final class Dataflow {
 
     /** SDK version stamped into agent metadata and the startup manifest. */
-    public static final String SDK_VERSION = "0.6.0";
+    public static final String SDK_VERSION = "0.7.0";
 
     /** Immutable SDK configuration. */
     public static final class Settings {
@@ -328,6 +328,45 @@ public final class Dataflow {
         @Override public void flush() {}
 
         @Override public void close() {}
+    }
+
+    /**
+     * Installs the {@link LogbackAppender} on the default SLF4J factory —
+     * the Logback {@code LoggerContext} behind {@code LoggerFactory} — so
+     * every Logback line (Spring Boot's default logging included) ships to
+     * {@code /api/v1/logs} with trace/span correlation, level mapping
+     * ({@code TRACE}/{@code DEBUG}→{@code debug}, {@code WARN}→{@code warn},
+     * {@code ERROR}→{@code error}) and {@code {}}-parameter formatting.
+     * Idempotent: an earlier install is detached first, never doubled. The
+     * reverse of {@link #uninstallLogback()}.
+     *
+     * <p>Logback-classic is an {@code optional} / {@code provided} dependency
+     * of the SDK: the appender class only loads when this is called, and the
+     * call fails with {@code NoClassDefFoundError} when Logback is not on the
+     * classpath (take it from the service's own dependency set — Spring Boot
+     * ships it). Skips silently when SLF4J is bound to a non-Logback backend.
+     */
+    public static void installLogback() {
+        LogbackAppender.installDefault();
+    }
+
+    /**
+     * {@link #installLogback()} for an explicit Logback
+     * {@code LoggerContext} (one the application manages itself instead of
+     * the {@code LoggerFactory} default). Idempotent: an earlier install is
+     * detached first.
+     */
+    public static void installLogback(ch.qos.logback.classic.LoggerContext ctx) {
+        LogbackAppender.install(ctx);
+    }
+
+    /**
+     * Detaches and stops the appender installed by {@link #installLogback()}
+     * / {@link #installLogback(ch.qos.logback.classic.LoggerContext)}. No-op
+     * (never throws) when nothing is installed.
+     */
+    public static void uninstallLogback() {
+        LogbackAppender.uninstall();
     }
 
     /** Opens a child span of the current thread's span (or a new trace). */

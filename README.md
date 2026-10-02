@@ -4,7 +4,9 @@ Runtime tracing for JVM services. Streams completed spans over **gRPC**
 (`StreamEvents` + ack-watermark replay buffer) — the same wire contract as
 the Go and Python SDKs.
 
-- Java 17+, zero third-party dependencies besides `grpc-java` / `protobuf-java`
+- Java 17+, no hard dependencies besides `grpc-java` / `protobuf-java`
+  (the Logback appender's `logback-classic` is optional/provided — supplied
+  by your service)
 - AES-256-GCM payload encryption (PBKDF2-SHA256, 10k iterations) — payload
   values never leave the host unencrypted
 - Field-name lineage (`data.fields`) + client-side PII classification
@@ -23,9 +25,9 @@ the Go and Python SDKs.
 - `Dataflow.capture` / `Dataflow.captureUncaught` — crash capture: crashes are
   recorded (status 500, `error_message`, `error.stack`) and then rethrown or
   chained, never swallowed
-- `Dataflow.info/warn/error/debug` + `Dataflow.LogHandler` (JUL bridge) —
-  application log shipping batched to `POST /api/v1/logs` with trace/span
-  correlation
+- `Dataflow.info/warn/error/debug` + `Dataflow.LogHandler` (JUL bridge) /
+  `Dataflow.installLogback()` (SLF4J/Logback appender) — application log
+  shipping batched to `POST /api/v1/logs` with trace/span correlation
 
 ## Quick start
 
@@ -137,6 +139,37 @@ logger names, throwables and other extras are skipped:
 java.util.logging.Logger.getLogger("").addHandler(new Dataflow.LogHandler());
 ```
 
+For SLF4J/Logback — the default logging stack of Spring Boot and most Java
+services — `Dataflow.installLogback()` attaches a `LogbackAppender` to the
+root logger of the default `LoggerContext` (`LoggerFactory.getILoggerFactory()`).
+Every Logback line is then forwarded into the same pipeline with level
+mapping (`TRACE`/`DEBUG`→`debug`, `INFO`→`info`, `WARN`→`warn`,
+`ERROR`→`error`), `{}`-parameter formatting and, when an event carries only
+a throwable, the throwable's `ClassName: message` standing in as the line.
+Key-value pairs and markers are skipped in v1. The install is idempotent (an
+earlier install is detached first, never doubled);
+`Dataflow.uninstallLogback()` detaches and stops it again. While the SDK is
+disabled the appender records nothing. An explicit context works too:
+`Dataflow.installLogback(loggerContext)`.
+
+```java
+Dataflow.installLogback();          // right after Dataflow.configure()
+```
+
+Spring Boot — a one-bean install at startup:
+
+```java
+@Bean
+ApplicationRunner dataflowLogs() {
+    return args -> Dataflow.installLogback();
+}
+```
+
+`logback-classic` is an **optional/provided** dependency of the SDK: services
+already running Logback get the appender for free, and the SDK never pulls
+Logback into a build that doesn't have it (`LogbackAppender` only loads when
+installed).
+
 The HTTP base resolves like the startup manifest's
 (`DATAFLOW_HTTP_URL` > URL-form `DATAFLOW_ENDPOINT`; a bare `host:port`
 gRPC endpoint ships no logs). While the SDK is disabled every call is a
@@ -186,7 +219,7 @@ skipped with a clear message).
 <dependency>
   <groupId>dev.huginnlabs.dataflow</groupId>
   <artifactId>dataflow-sdk</artifactId>
-  <version>0.6.0</version>
+  <version>0.7.0</version>
 </dependency>
 ```
 

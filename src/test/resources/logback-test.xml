@@ -1,0 +1,16 @@
+<!--
+  Test-only Logback configuration: keeps framework logging (shaded netty
+  routes through slf4j now that logback is on the test classpath) quiet at
+  WARN on the console. The SdkLogbackTest loggers set their own explicit
+  levels, so the appender-under-test still sees every level it ships.
+-->
+<configuration>
+  <appender name="console" class="ch.qos.logback.core.ConsoleAppender">
+    <encoder>
+      <pattern>%d{HH:mm:ss.SSS} %-5level %logger{36} - %msg%n</pattern>
+    </encoder>
+  </appender>
+  <root level="WARN">
+    <appender-ref ref="console"/>
+  </root>
+</configuration>
