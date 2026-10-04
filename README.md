@@ -241,5 +241,8 @@ instrumentation / Dataflow SDK / OpenTelemetry), one shared load driver,
 spans exported live. Methodology, current numbers and reproduction steps:
 Numbers are published in each SDK README as they are measured; the full harness lives in the Dataflow monorepo `bench/`.
 
-Numbers for this SDK: **queued** — the harness follows the same contract
-and will land here.
+Measured for this SDK (dockerized JVM, com.sun.net.httpserver +
+DataflowFilter, one traced child per request, gRPC export live): baseline
+176 rps, **dataflow-sdk 173 rps** and OTEL 173 rps on the identical
+workload — the SDK's overhead is below the run-to-run noise floor: the
+export pipeline runs off the request path.
