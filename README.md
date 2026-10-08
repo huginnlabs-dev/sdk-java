@@ -1,4 +1,11 @@
+<div align="center">
+
+  <img src="assets/mark.svg" width="72" alt="Dataflow mark" />
+
 # Dataflow Java SDK
+
+</div>
+
 
 Runtime tracing for JVM services. Streams completed spans over **gRPC**
 (`StreamEvents` + ack-watermark replay buffer) — the same wire contract as
